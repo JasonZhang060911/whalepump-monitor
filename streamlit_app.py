@@ -3,6 +3,8 @@ import streamlit as st
 import pandas as pd
 from binance.client import Client
 from streamlit_autorefresh import st_autorefresh
+import requests
+
 
 # —— CONFIG ——  
 THRESHOLD = 400
@@ -52,7 +54,9 @@ def fetch_whale_data_for(symbol: str) -> list[dict]:
     client = Client(API_KEY, API_SECRET)
     rows = []
     for iv in INTERVALS:
-        klines = client.get_klines(symbol=symbol, interval=iv, limit=100)
+        kl_url = "https://api.binance.com/api/v3/klines"
+        params = {"symbol": symbol, "interval": iv, "limit": 100}
+        klines = requests.get(kl_url, params=params, timeout=10).json()
         lows   = [float(k[3]) for k in klines]
         closes = [float(k[4]) for k in klines]
         wp     = calculate_whale_pump(lows, closes)
@@ -69,9 +73,13 @@ st.set_page_config(page_title="Whale Pump Monitor", layout="wide")
 st.title("🦈 Whale Pump Monitor")
 st_autorefresh(interval=10_000, key="refresh")
 
-# 初始化 Binance 客户端并拉取所有交易对
-client      = Client()
-symbols_inf = client.get_exchange_info()["symbols"]
+# 不再初始化 Binance Client
+# client = Client()
+
+# 1) 获取所有 symbol 信息（公共端点，无需签名）
+info_url    = "https://api.binance.com/api/v3/exchangeInfo"
+resp        = requests.get(info_url, timeout=10)
+symbols_inf = resp.json()["symbols"]
 
 # 过滤：symbol 以 USDT 结尾、状态为 TRADING、可现货交易
 all_usdt = [
