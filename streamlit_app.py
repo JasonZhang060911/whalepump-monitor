@@ -1,10 +1,9 @@
 import math
+import requests
 import streamlit as st
 import pandas as pd
 from binance.client import Client
 from streamlit_autorefresh import st_autorefresh
-import requests
-
 
 # —— CONFIG ——  
 THRESHOLD = 400
@@ -13,6 +12,31 @@ INTERVALS = ["5m", "15m", "30m", "1h", "4h", "1d", "1w"]
 # 从 Streamlit Secrets 读取 API Key
 API_KEY    = st.secrets["BINANCE_API_KEY"]
 API_SECRET = st.secrets["BINANCE_API_SECRET"]
+
+# —— 缓存加载所有 USDT 交易对 ——  
+@st.cache_data(ttl=300)
+def load_all_usdt_symbols():
+    """拉取 /exchangeInfo 并过滤出可现货交易的 USDT 对"""
+    url = "https://api.binance.com/api/v3/exchangeInfo"
+    resp = requests.get(url, timeout=10)
+    # 1) HTTP 状态检查
+    resp.raise_for_status()
+    # 2) JSON 解析
+    try:
+        data = resp.json()
+    except ValueError:
+        raise RuntimeError("交易所返回了无效的 JSON")
+    # 3) 检查 symbols
+    if "symbols" not in data:
+        raise RuntimeError(f"意外的返回结构：{data}")
+    # 4) 过滤
+    return [
+        s["symbol"]
+        for s in data["symbols"]
+        if s["symbol"].endswith("USDT")
+           and s.get("status") == "TRADING"
+           and s.get("isSpotTradingAllowed", False)
+    ]
 
 # —— 核心计算函数 ——  
 def calculate_whale_pump(lows: list[float], closes: list[float]) -> float:
@@ -73,22 +97,12 @@ st.set_page_config(page_title="Whale Pump Monitor", layout="wide")
 st.title("🦈 Whale Pump Monitor")
 st_autorefresh(interval=60_000, key="refresh")
 
-# 不再初始化 Binance Client
-# client = Client()
-
-# 1) 获取所有 symbol 信息（公共端点，无需签名）
-info_url    = "https://api.binance.com/api/v3/exchangeInfo"
-resp        = requests.get(info_url, timeout=10)
-symbols_inf = resp.json()["symbols"]
-
-# 过滤：symbol 以 USDT 结尾、状态为 TRADING、可现货交易
-all_usdt = [
-    s["symbol"]
-    for s in symbols_inf
-    if s["symbol"].endswith("USDT")
-       and s.get("status") == "TRADING"
-       and s.get("isSpotTradingAllowed", False)
-]
+# 加载交易对列表，并在出错时提示
+try:
+    all_usdt = load_all_usdt_symbols()
+except Exception as e:
+    st.error(f"加载交易对列表失败：{e}")
+    st.stop()
 
 # 侧边栏：多选交易对
 selected = st.sidebar.multiselect(
@@ -121,7 +135,7 @@ df["Timeframe"] = pd.Categorical(
 # 保留四位小数
 df["WhalePumpValue"] = df["WhalePumpValue"].map(lambda x: float(f"{x:.4f}"))
 
-# 排序：先按 Symbol，再按 Timeframe；警报优先时先按 Status
+# 排序
 if sort_mode.startswith("警报优先"):
     df = df.sort_values(["Status", "Timeframe"], ascending=[True, True])
 else:
