@@ -70,7 +70,7 @@ st.title("🦈 Whale Pump Monitor")
 st_autorefresh(interval=10_000, key="refresh")
 
 # 初始化 Binance 客户端并拉取所有交易对
-client      = Client(API_KEY, API_SECRET)
+client      = Client()
 symbols_inf = client.get_exchange_info()["symbols"]
 
 # 过滤：symbol 以 USDT 结尾、状态为 TRADING、可现货交易
