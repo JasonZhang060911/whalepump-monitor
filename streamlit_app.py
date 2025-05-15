@@ -71,7 +71,7 @@ def fetch_whale_data_for(symbol: str) -> list[dict]:
 # —— Streamlit UI ——  
 st.set_page_config(page_title="Whale Pump Monitor", layout="wide")
 st.title("🦈 Whale Pump Monitor")
-st_autorefresh(interval=10_000, key="refresh")
+st_autorefresh(interval=60_000, key="refresh")
 
 # 不再初始化 Binance Client
 # client = Client()
